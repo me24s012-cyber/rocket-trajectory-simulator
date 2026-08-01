@@ -76,3 +76,59 @@ class Rocket:
             f"Isp={self.Isp:.1f} s, burn_time={self.burn_time:.1f} s, "
             f"mass_ratio={self.mass_ratio:.2f})"
         )
+
+
+def build_stage_rockets(stage_configs, payload_mass):
+    """
+    Build a list of per-stage Rocket objects for a multi-stage vehicle.
+
+    Each stage is defined by its own propellant mass and structural
+    (dry casing) mass. The propellant is what's burned; the structural
+    mass is jettisoned (dropped) once that stage's propellant is spent.
+    The payload mass rides on top of every stage until the final one.
+
+    Parameters
+    ----------
+    stage_configs : list of dict
+        Each dict must have keys: 'prop_mass', 'structural_mass',
+        'Isp', 'burn_time', 'A', 'CD'. Stages are ordered bottom-up
+        (index 0 = first stage to ignite/burn, e.g. the booster).
+    payload_mass : float
+        Mass, kg, that stays attached through all stages (e.g. the
+        satellite/upper spacecraft).
+
+    Returns
+    -------
+    rockets : list of Rocket
+        One Rocket per stage, with m0/mf correctly reflecting the
+        payload plus all not-yet-jettisoned stages above/below it.
+    separation_masses : list of float
+        Structural mass jettisoned immediately after each stage's
+        propellant is spent (same order as `rockets`).
+    """
+    n = len(stage_configs)
+    stage_total_masses = [
+        cfg["prop_mass"] + cfg["structural_mass"] for cfg in stage_configs
+    ]
+
+    rockets = []
+    separation_masses = []
+    for i, cfg in enumerate(stage_configs):
+        # Mass still attached at ignition of stage i: payload + this
+        # stage + all stages above it that haven't ignited yet.
+        m0 = payload_mass + sum(stage_total_masses[i:])
+        mf = m0 - cfg["prop_mass"]  # after burn, before jettisoning casing
+
+        rockets.append(
+            Rocket(
+                m0=m0,
+                mf=mf,
+                Isp=cfg["Isp"],
+                burn_time=cfg["burn_time"],
+                A=cfg["A"],
+                CD=cfg["CD"],
+            )
+        )
+        separation_masses.append(cfg["structural_mass"])
+
+    return rockets, separation_masses

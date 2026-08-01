@@ -191,3 +191,159 @@ def run_gravity_turn_ascent(
         "t_kick": t_kick,
         "raw": (sol1, sol2),
     }
+
+
+def run_multistage_ascent(
+    rockets,
+    separation_masses,
+    kick_speed=50.0,
+    kick_angle_deg=89.0,
+    coast_time=60.0,
+    max_step=0.2,
+):
+    """
+    Simulate a multi-stage gravity-turn ascent: vertical rise, pitchover
+    kick, then each stage burning in sequence with an instantaneous
+    mass jettison (stage separation) between them.
+
+    Parameters
+    ----------
+    rockets : list of rocket_sim.vehicle.Rocket
+        One Rocket per stage, in burn order (index 0 ignites first).
+        Typically built with vehicle.build_stage_rockets().
+    separation_masses : list of float
+        Structural mass (kg) jettisoned immediately after each stage
+        burns out (same order/length as `rockets`).
+    kick_speed : float
+        Speed (m/s) at which the vertical rise phase ends and the
+        pitchover kick is applied (see run_gravity_turn_ascent).
+    kick_angle_deg : float
+        Flight path angle (degrees) immediately after the pitchover.
+    coast_time : float
+        Additional unpowered coast time (s) simulated after the final
+        stage burns out.
+    max_step : float
+        Maximum solver step size, s.
+
+    Returns
+    -------
+    dict
+        Same keys as run_gravity_turn_ascent, plus:
+        'stage_burnout_times' -- list of times (s) when each stage
+        finished burning (before that stage's mass jettison).
+        'stage_separation_times' -- same times, alias for clarity.
+    """
+    if len(rockets) != len(separation_masses):
+        raise ValueError("rockets and separation_masses must be the same length")
+
+    t_all, v_all, gamma_all, x_all, h_all, m_all = [], [], [], [], [], []
+    stage_burnout_times = []
+
+    # --- Vertical rise phase (uses stage 0's thrust/drag properties) ---
+    def hit_kick_speed(t, y):
+        return y[0] - kick_speed
+    hit_kick_speed.terminal = True
+    hit_kick_speed.direction = 1
+
+    first_rocket = rockets[0]
+    y0_phase1 = [1e-3, np.pi / 2, 0.0, 0.0, first_rocket.m0]
+
+    sol1 = solve_ivp(
+        fun=lambda t, y: equations_of_motion(t, y, first_rocket),
+        t_span=(0, first_rocket.burn_time),
+        y0=y0_phase1,
+        method="RK45",
+        max_step=max_step,
+        events=hit_kick_speed,
+        rtol=1e-8,
+        atol=1e-10,
+    )
+    if not sol1.success or len(sol1.t_events[0]) == 0:
+        raise RuntimeError("Vertical rise phase failed or never reached kick_speed.")
+
+    t_kick = sol1.t_events[0][0]
+    v, _gamma, x, h, m = sol1.y_events[0][0]
+    gamma = np.radians(kick_angle_deg)  # apply pitchover kick
+
+    t_all.append(sol1.t)
+    v_all.append(sol1.y[0])
+    gamma_all.append(sol1.y[1])
+    x_all.append(sol1.y[2])
+    h_all.append(sol1.y[3])
+    m_all.append(sol1.y[4])
+
+    t_current = t_kick
+
+    # --- Burn each stage in sequence ---
+    for i, rocket in enumerate(rockets):
+        t_stage_end = t_current + rocket.burn_time
+        y0 = [v, gamma, x, h, m]
+
+        sol = solve_ivp(
+            fun=lambda t, y, r=rocket: equations_of_motion(t, y, r),
+            t_span=(t_current, t_stage_end),
+            y0=y0,
+            method="RK45",
+            max_step=max_step,
+            rtol=1e-8,
+            atol=1e-10,
+        )
+        if not sol.success:
+            raise RuntimeError(f"Stage {i+1} burn integration failed: {sol.message}")
+
+        # Skip the first sample (it duplicates the previous phase's
+        # final point).
+        t_all.append(sol.t[1:])
+        v_all.append(sol.y[0][1:])
+        gamma_all.append(sol.y[1][1:])
+        x_all.append(sol.y[2][1:])
+        h_all.append(sol.y[3][1:])
+        m_all.append(sol.y[4][1:])
+
+        v, gamma, x, h, m = sol.y[0][-1], sol.y[1][-1], sol.y[2][-1], sol.y[3][-1], sol.y[4][-1]
+        stage_burnout_times.append(t_stage_end)
+
+        # Stage separation: instantaneously drop structural mass.
+        m = m - separation_masses[i]
+        t_current = t_stage_end
+
+    # --- Final coast phase (no thrust; reuse last rocket, mass already at mf) ---
+    if coast_time > 0:
+        last_rocket = rockets[-1]
+        sol_coast = solve_ivp(
+            fun=lambda t, y: equations_of_motion(t, y, last_rocket),
+            t_span=(t_current, t_current + coast_time),
+            y0=[v, gamma, x, h, m],
+            method="RK45",
+            max_step=max_step,
+            rtol=1e-8,
+            atol=1e-10,
+        )
+        if not sol_coast.success:
+            raise RuntimeError(f"Coast phase integration failed: {sol_coast.message}")
+
+        t_all.append(sol_coast.t[1:])
+        v_all.append(sol_coast.y[0][1:])
+        gamma_all.append(sol_coast.y[1][1:])
+        x_all.append(sol_coast.y[2][1:])
+        h_all.append(sol_coast.y[3][1:])
+        m_all.append(sol_coast.y[4][1:])
+
+    t = np.concatenate(t_all)
+    v = np.concatenate(v_all)
+    gamma = np.concatenate(gamma_all)
+    x = np.concatenate(x_all)
+    h = np.concatenate(h_all)
+    m = np.concatenate(m_all)
+
+    return {
+        "t": t,
+        "v": v,
+        "gamma_deg": np.degrees(gamma),
+        "x": x,
+        "h": h,
+        "m": m,
+        "t_kick": t_kick,
+        "stage_burnout_times": stage_burnout_times,
+        "stage_separation_times": stage_burnout_times,
+    }
