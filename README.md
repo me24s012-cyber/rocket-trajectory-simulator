@@ -51,6 +51,10 @@ closed-form analytic solution before adding harder physics on top.
 - **Orbital insertion analysis** — treats the vehicle's burnout state as
   the start of a two-body Kepler orbit and reports whether it's actually
   a valid closed orbit, suborbital, or an escape trajectory
+- **Optimal staging calculator** — given a target delta-v, payload mass,
+  and each stage's Isp/structural ratio, solves for the mass split that
+  minimizes total vehicle mass (Curtis Ch. 11.6, Lagrange multiplier
+  method), validated against the textbook's own worked example
 
 ## Results
 
@@ -76,6 +80,15 @@ accelerate a much smaller mass.
 | Burnout altitude | 39,590.35 m | 39,590.36 m | 0.0000% |
 
 Run it yourself: `python examples/validate_example_11_1.py`
+
+### Validation against Curtis's Example 11.5 (optimal staging)
+
+Reproducing the textbook's three-stage optimal staging example (5000 kg
+payload, 10 km/s required delta-v) matches every published value —
+mass ratios, step masses, structural/propellant masses, and total
+vehicle mass — to within ~0.2%.
+
+Run it yourself: `python examples/validate_optimal_staging.py`
 
 ## Physics model
 
@@ -143,6 +156,11 @@ python examples/animate_ascent.py
 
 # Check whether a vehicle actually achieves orbit at burnout
 python examples/orbital_insertion_check.py
+
+# Solve for the optimal mass split across stages (validated against
+# Curtis's own worked example)
+python examples/validate_optimal_staging.py
+python examples/optimal_staging_demo.py
 ```
 
 Each script prints key trajectory milestones to the console and saves a
@@ -150,11 +168,11 @@ plot to `plots/`.
 
 ## Possible extensions
 
-- Optimal staging (Curtis Ch. 11.6) — solving for the mass split between
-  stages that maximizes final payload velocity
 - Active/closed-loop guidance — continuously adjusting the thrust vector
   during ascent to reliably hit a precise target orbit, rather than relying
   on a single open-loop pitchover kick
+- Full ISA atmosphere model and Mach-dependent drag coefficient, in place
+  of the current exponential-density/constant-CD approximation
 - Monte Carlo dispersion analysis on Isp/mass uncertainties
 
 ## References
