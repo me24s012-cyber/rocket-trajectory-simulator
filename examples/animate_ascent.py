@@ -17,44 +17,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-from matplotlib.path import Path
-from matplotlib.markers import MarkerStyle
-from matplotlib.transforms import Affine2D
 
 from rocket_sim.vehicle import build_stage_rockets
 from rocket_sim.simulate import run_multistage_ascent
-
-
-def rocket_marker(angle_deg):
-    """
-    Build a small rocket-silhouette marker (nose cone + body + two fins)
-    that points "up" by default and is then rotated to match the
-    vehicle's current flight path angle.
-
-    angle_deg : flight path angle, degrees (90 = straight up, matching
-    the marker's default orientation, so the applied rotation is
-    (angle_deg - 90) degrees).
-    """
-    verts = [
-        (0.00, 1.00),   # nose tip
-        (0.25, 0.35),   # right shoulder
-        (0.22, -0.55),  # right body
-        (0.45, -1.00),  # right fin tip
-        (0.10, -0.65),  # right fin root
-        (0.00, -0.80),  # tail center
-        (-0.10, -0.65), # left fin root
-        (-0.45, -1.00), # left fin tip
-        (-0.22, -0.55), # left body
-        (-0.25, 0.35),  # left shoulder
-        (0.00, 1.00),   # close at nose
-    ]
-    codes = [Path.MOVETO] + [Path.LINETO] * (len(verts) - 2) + [Path.CLOSEPOLY]
-    path = Path(verts, codes)
-
-    # Marker's "up" direction corresponds to a 90 deg flight path angle,
-    # so rotate by (angle_deg - 90) to match the vehicle's actual pitch.
-    transform = Affine2D().rotate_deg(angle_deg - 90)
-    return MarkerStyle(path, transform=transform)
+from rocket_sim.visualization import rocket_marker
 
 
 def main():

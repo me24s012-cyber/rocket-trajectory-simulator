@@ -3,9 +3,27 @@
 A numerical simulation of a launch vehicle's ascent trajectory — including
 the gravity turn maneuver, atmospheric drag, variable mass depletion, and
 multi-stage separation — built from first-principles equations of motion
-and validated against a textbook closed-form solution.
+and validated against a textbook closed-form solution. Includes an
+interactive web app for configuring and running your own simulations.
+
+![Ascent animation](assets/ascent_animation.gif)
 
 ![Two-stage ascent trajectory](assets/multistage_demo.png)
+
+## Try it interactively
+
+This project includes a Streamlit web app where you can configure your own
+1-3 stage launch vehicle (propellant mass, structural mass, Isp, burn time,
+drag) and see the resulting trajectory instantly.
+
+```bash
+pip install -r requirements.txt
+streamlit run app.py
+```
+
+This opens in your browser at `http://localhost:8501`. It can also be
+deployed for free on [Streamlit Community Cloud](https://share.streamlit.io)
+by pointing it at `app.py` in this repo, giving you a live shareable link.
 
 ## Why this project
 
@@ -83,6 +101,7 @@ dynamics to behave well.
 ## Project structure
 
 ```
+app.py               # interactive Streamlit web UI
 rocket_sim/
 ├── atmosphere.py   # ISA-approximation density model + altitude-dependent gravity
 ├── vehicle.py      # Rocket class; build_stage_rockets() for multi-stage vehicles
@@ -115,6 +134,9 @@ python examples/gravity_turn_demo.py
 
 # Two-stage launch vehicle with stage separation
 python examples/multistage_demo.py
+
+# Generate the animated ascent GIF (used in this README)
+python examples/animate_ascent.py
 ```
 
 Each script prints key trajectory milestones to the console and saves a
