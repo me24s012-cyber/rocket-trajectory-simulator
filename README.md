@@ -39,8 +39,10 @@ closed-form analytic solution before adding harder physics on top.
 - **Gravity turn dynamics** — the vehicle pitches over from vertical to
   horizontal under gravity alone, exactly as real satellite launch vehicles
   do to reach orbital velocity
-- **Atmospheric drag** — using an exponential (ISA-approximation) density
-  model, so drag naturally fades out as the vehicle climbs
+- **Atmospheric drag** — using the full layered International Standard
+  Atmosphere (ISA) model (troposphere through mesosphere, with the
+  correct temperature lapse rate in each layer), validated against
+  published ISA reference tables to 4-5 significant figures
 - **Variable mass & altitude-dependent gravity** — no constant-mass or
   constant-g shortcuts in the general model
 - **Multi-stage separation** — models a real launch vehicle dropping its
@@ -90,6 +92,18 @@ vehicle mass — to within ~0.2%.
 
 Run it yourself: `python examples/validate_optimal_staging.py`
 
+### ISA atmosphere model validation
+
+`rocket_sim/atmosphere.py` implements the actual layered ISA model
+(temperature lapse rates through the troposphere/tropopause/stratosphere/
+mesosphere, with density derived via the ideal gas law) rather than a
+single crude exponential approximation. Checked against published ISA
+reference table values, it matches to 4-5 significant figures at every
+standard layer boundary (e.g., 0.36392 kg/m^3 at 11 km vs. the published
+0.3639; 0.08803 kg/m^3 at 20 km vs. the published 0.08803).
+
+Run it yourself: `python rocket_sim/atmosphere.py`
+
 ## Physics model
 
 The simulator integrates the following equations of motion (Curtis, Ch. 11):
@@ -102,7 +116,7 @@ The simulator integrates the following equations of motion (Curtis, Ch. 11):
 - **Thrust:** `T = Isp*g0*mdot`
 - **Drag:** `D = 0.5*rho(h)*v^2*A*CD`
 
-where `rho(h)` comes from an exponential atmosphere model and `g(h)` follows
+where `rho(h)` comes from the full layered ISA model and `g(h)` follows
 the inverse-square law rather than a fixed constant.
 
 **A numerical subtlety worth noting:** the flight-path-angle equation has a
@@ -171,8 +185,9 @@ plot to `plots/`.
 - Active/closed-loop guidance — continuously adjusting the thrust vector
   during ascent to reliably hit a precise target orbit, rather than relying
   on a single open-loop pitchover kick
-- Full ISA atmosphere model and Mach-dependent drag coefficient, in place
-  of the current exponential-density/constant-CD approximation
+- Mach-dependent drag coefficient, using the ISA model's temperature output
+  to compute local speed of sound and Mach number (the groundwork for this
+  -- `atmosphere.speed_of_sound()` -- is already in place)
 - Monte Carlo dispersion analysis on Isp/mass uncertainties
 
 ## References
