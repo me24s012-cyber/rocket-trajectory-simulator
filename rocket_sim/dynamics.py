@@ -16,10 +16,16 @@ Equations (Curtis 11.6, 11.7, 11.8, and mass depletion):
     dx/dt     = [R_E / (R_E + h)] * v * cos(gamma)
     dh/dt     = v * sin(gamma)
     dm/dt     = -mdot   (while propellant remains)
+
+Drag uses a Mach-dependent coefficient (rocket_sim.aerodynamics): the
+vehicle's CD attribute is treated as its subsonic baseline value, scaled
+by a representative transonic-drag-rise curve based on the local Mach
+number (computed from the ISA speed of sound at the current altitude).
 """
 
 import numpy as np
 from rocket_sim import atmosphere
+from rocket_sim import aerodynamics
 from rocket_sim.atmosphere import R_EARTH
 
 
@@ -35,7 +41,10 @@ def equations_of_motion(t, y, rocket, constant_gravity=False):
     y : array-like, shape (5,)
         Current state [v, gamma, x, h, m].
     rocket : rocket_sim.vehicle.Rocket
-        The vehicle providing thrust(m), mass_flow_rate(m), A, CD.
+        The vehicle providing thrust(m), mass_flow_rate(m), A, CD. CD is
+        treated as the subsonic baseline drag coefficient; the actual
+        drag coefficient used varies with Mach number (see
+        rocket_sim.aerodynamics.drag_coefficient).
     constant_gravity : bool, optional
         If True, use a fixed sea-level gravity (9.80665 m/s^2) instead
         of the inverse-square variation with altitude. This is used to
@@ -59,8 +68,11 @@ def equations_of_motion(t, y, rocket, constant_gravity=False):
 
     rho = atmosphere.density(h)
 
+    mach = aerodynamics.mach_number(v_safe, h)
+    cd_effective = aerodynamics.drag_coefficient(mach, rocket.CD)
+
     T = rocket.thrust(m)
-    D = 0.5 * rho * v_safe**2 * rocket.A * rocket.CD
+    D = 0.5 * rho * v_safe**2 * rocket.A * cd_effective
 
     dv_dt = T / m - D / m - g * np.sin(gamma)
 
