@@ -7,5 +7,7 @@ venv/
 env/
 .vscode/
 .DS_Store
-*.png
+
+# Ignore generated plot output, but keep the committed README images in assets/
+plots/*.png
 !plots/.gitkeep
