@@ -20,8 +20,7 @@ Equations (Curtis 11.6, 11.7, 11.8, and mass depletion):
 
 import numpy as np
 from rocket_sim import atmosphere
-
-R_EARTH = 6_378_000.0  # m, mean Earth radius (Curtis Table A.2 scale)
+from rocket_sim.atmosphere import R_EARTH
 
 
 def equations_of_motion(t, y, rocket, constant_gravity=False):

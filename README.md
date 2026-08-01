@@ -48,6 +48,9 @@ closed-form analytic solution before adding harder physics on top.
   verified against the known payload mass
 - **Validated integration** — the numerical solver is checked against
   Curtis's closed-form solution (Example 11.1) to better than 0.1% error
+- **Orbital insertion analysis** — treats the vehicle's burnout state as
+  the start of a two-body Kepler orbit and reports whether it's actually
+  a valid closed orbit, suborbital, or an escape trajectory
 
 ## Results
 
@@ -137,6 +140,9 @@ python examples/multistage_demo.py
 
 # Generate the animated ascent GIF (used in this README)
 python examples/animate_ascent.py
+
+# Check whether a vehicle actually achieves orbit at burnout
+python examples/orbital_insertion_check.py
 ```
 
 Each script prints key trajectory milestones to the console and saves a
@@ -146,8 +152,9 @@ plot to `plots/`.
 
 - Optimal staging (Curtis Ch. 11.6) — solving for the mass split between
   stages that maximizes final payload velocity
-- Orbital insertion check — comparing final velocity/flight-path-angle
-  against circular orbital velocity at that altitude
+- Active/closed-loop guidance — continuously adjusting the thrust vector
+  during ascent to reliably hit a precise target orbit, rather than relying
+  on a single open-loop pitchover kick
 - Monte Carlo dispersion analysis on Isp/mass uncertainties
 
 ## References

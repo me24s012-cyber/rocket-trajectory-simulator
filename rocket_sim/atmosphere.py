@@ -13,8 +13,15 @@ RHO_0 = 1.225
 
 # Atmospheric scale height, m
 # (Height over which density falls by a factor of 1/e.
-#  ~8500 m is a standard approximation for Earth's lower atmosphere.)
+#  ~8500 m is a representative approximation for Earth's lower atmosphere.)
 SCALE_HEIGHT = 8500.0
+
+# Earth's gravitational parameter (GM_Earth), m^3/s^2 (Curtis Table A.2:
+# mu_Earth = 398,600 km^3/s^2, converted to SI here).
+MU_EARTH = 398_600e9
+
+# Earth's mean equatorial radius, m.
+R_EARTH = 6_378_000.0
 
 
 def density(h):
@@ -48,7 +55,7 @@ def density(h):
     return rho
 
 
-def gravity(h, mu_earth=398_600e9, r_earth=6_378_000.0):
+def gravity(h, mu_earth=MU_EARTH, r_earth=R_EARTH):
     """
     Return local gravitational acceleration at altitude h using the
     inverse-square law (Curtis Eq. 1.8 equivalent):

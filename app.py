@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 from rocket_sim.vehicle import build_stage_rockets
 from rocket_sim.simulate import run_multistage_ascent
 from rocket_sim.visualization import rocket_marker
+from rocket_sim.orbit import analyze_orbit, format_orbit_report
 
 st.set_page_config(page_title="Rocket Trajectory Simulator", page_icon="🚀", layout="wide")
 
@@ -158,6 +159,53 @@ elif st.session_state.get("result") is not None:
     col2.metric("Max altitude", f"{h.max():,.1f} km")
     col3.metric("Max speed", f"{v.max():,.0f} m/s")
     col4.metric("Final downrange", f"{x[-1]:,.1f} km")
+
+    # ---------------- Orbital insertion analysis ----------------
+    st.subheader("🛰️ Orbital Insertion Analysis")
+    st.caption(
+        "Analyzed at the end of the simulation, treating the vehicle as coasting "
+        "under gravity alone (a two-body Kepler orbit) from that point on."
+    )
+    orbit_analysis = analyze_orbit(v[-1], gamma[-1], h[-1] * 1000)  # h back to meters
+
+    ocol1, ocol2, ocol3 = st.columns(3)
+    ocol1.metric("Eccentricity", f"{orbit_analysis['eccentricity']:.3f}")
+    ocol2.metric("Local circular velocity", f"{orbit_analysis['v_circular']:,.0f} m/s")
+    if orbit_analysis["perigee_altitude"] is not None:
+        peri_km = orbit_analysis["perigee_altitude"] / 1000
+        ocol3.metric("Perigee altitude", f"{peri_km:,.1f} km")
+
+    if orbit_analysis["perigee_altitude"] is not None and orbit_analysis["perigee_altitude"] < 0:
+        st.warning(
+            f"🔻 {orbit_analysis['orbit_type']} Apogee altitude: "
+            f"{orbit_analysis['apogee_altitude']/1000:,.1f} km."
+        )
+    elif "Hyperbolic" in orbit_analysis["orbit_type"] or "Parabolic" in orbit_analysis["orbit_type"]:
+        st.warning(f"🚀 {orbit_analysis['orbit_type']}")
+    else:
+        st.success(
+            f"✅ {orbit_analysis['orbit_type']} "
+            f"Perigee: {orbit_analysis['perigee_altitude']/1000:,.1f} km, "
+            f"Apogee: {orbit_analysis['apogee_altitude']/1000:,.1f} km, "
+            f"Period: {orbit_analysis['period']/60:,.1f} min."
+        )
+        if orbit_analysis["delta_v_to_circularize"]:
+            st.info(
+                f"To circularize at apogee, a burn of "
+                f"{orbit_analysis['delta_v_to_circularize']:,.1f} m/s would be needed."
+            )
+
+    with st.expander("Why might this be suborbital or hyperbolic instead of a clean orbit?"):
+        st.markdown(
+            "This simulator applies **one** deliberate pitchover kick and then lets "
+            "gravity do all further steering (a passive gravity turn) — there's no "
+            "active guidance loop continuously correcting the trajectory. Real launch "
+            "vehicles constantly adjust their thrust vector throughout ascent to hit a "
+            "precise target insertion state. Hitting that exactly with a single open-loop "
+            "kick is possible but numerically delicate — try adjusting stage propellant "
+            "masses, burn times, and the pitchover kick angle/speed in the sidebar to see "
+            "how sensitive orbital insertion is to these choices."
+        )
 
     fig, axes = plt.subplots(2, 2, figsize=(11, 7))
 
