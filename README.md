@@ -61,6 +61,10 @@ closed-form analytic solution before adding harder physics on top.
   and each stage's Isp/structural ratio, solves for the mass split that
   minimizes total vehicle mass (Curtis Ch. 11.6, Lagrange multiplier
   method), validated against the textbook's own worked example
+- **Monte Carlo dispersion analysis** — runs hundreds of trials with
+  randomized Isp/mass/drag uncertainty (representing real manufacturing
+  tolerances) to show the actual spread of possible outcomes, not just
+  one nominal trajectory
 
 ## Results
 
@@ -87,6 +91,18 @@ speed (reached much later, near burnout at ~4 km/s). This is the
 real "max-Q" phenomenon well known in launch vehicle design: drag peaks
 during the transonic speed range where shock-wave formation spikes the
 drag coefficient, not simply where speed is highest.
+
+### Monte Carlo dispersion analysis
+![Monte Carlo dispersion](assets/monte_carlo_demo.png)
+
+Running 200 trials with realistic manufacturing-level uncertainty (Isp
+±2%, mass ±3%, drag coefficient ±10%, all 1-sigma) on the two-stage
+demo vehicle gives a final altitude of 1143 ± 44 km and final speed of
+6352 ± 158 m/s (mean ± std). The probability of achieving a valid orbit
+stayed at 0% across every trial — a useful finding in itself: this
+vehicle's shortfall (flight path angle too steep at burnout) is
+systematic, not something manufacturing tolerances would fix, which is
+exactly the kind of insight dispersion analysis is meant to surface.
 
 ### Validation against Curtis's Example 11.1
 
@@ -147,10 +163,15 @@ dynamics to behave well.
 ```
 app.py               # interactive Streamlit web UI
 rocket_sim/
-├── atmosphere.py   # ISA-approximation density model + altitude-dependent gravity
+├── atmosphere.py   # full ISA layered model + altitude-dependent gravity
+├── aerodynamics.py # Mach-dependent drag coefficient model
 ├── vehicle.py      # Rocket class; build_stage_rockets() for multi-stage vehicles
 ├── dynamics.py      # the coupled equations of motion (Curtis Ch. 11)
-└── simulate.py      # solve_ivp wrappers: single-stage, gravity-turn, multi-stage
+├── simulate.py      # solve_ivp wrappers: single-stage, gravity-turn, multi-stage
+├── orbit.py         # two-body orbital insertion analysis
+├── optimal_staging.py  # Lagrange-multiplier optimal mass staging (Curtis Ch. 11.6)
+├── monte_carlo.py   # dispersion analysis over randomized vehicle parameters
+└── visualization.py # shared plotting helper (rocket-silhouette marker)
 examples/
 ├── validate_example_11_1.py  # validates the integrator against a closed-form solution
 ├── gravity_turn_demo.py       # single-stage gravity turn ascent + plots
@@ -192,6 +213,9 @@ python examples/optimal_staging_demo.py
 
 # Compare constant-CD vs Mach-dependent CD ("max-Q" behavior)
 python examples/mach_drag_demo.py
+
+# Monte Carlo dispersion analysis (takes ~30-60s for 200 trials)
+python examples/monte_carlo_demo.py
 ```
 
 Each script prints key trajectory milestones to the console and saves a
@@ -199,10 +223,16 @@ plot to `plots/`.
 
 ## Possible extensions
 
+All limitations originally identified for this project have been
+addressed (orbital insertion check, optimal staging, full ISA atmosphere,
+Mach-dependent drag, and Monte Carlo dispersion analysis). The main
+remaining direction is:
+
 - Active/closed-loop guidance — continuously adjusting the thrust vector
   during ascent to reliably hit a precise target orbit, rather than relying
-  on a single open-loop pitchover kick
-- Monte Carlo dispersion analysis on Isp/mass uncertainties
+  on a single open-loop pitchover kick. This is a substantially larger
+  undertaking (real guidance algorithms, e.g. iterative guidance mode)
+  than the incremental additions above.
 
 ## References
 

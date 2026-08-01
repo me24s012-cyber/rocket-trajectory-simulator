@@ -21,6 +21,7 @@ from rocket_sim.simulate import run_multistage_ascent
 from rocket_sim.visualization import rocket_marker
 from rocket_sim.orbit import analyze_orbit, format_orbit_report
 from rocket_sim.optimal_staging import solve_optimal_staging, STANDARD_GRAVITY
+from rocket_sim.monte_carlo import run_dispersion_analysis
 
 st.set_page_config(page_title="Rocket Trajectory Simulator", page_icon="🚀", layout="wide")
 
@@ -31,7 +32,9 @@ st.markdown(
     "(Ch. 11)."
 )
 
-tab1, tab2 = st.tabs(["🚀 Trajectory Simulator", "⚖️ Optimal Staging Calculator"])
+tab1, tab2, tab3 = st.tabs([
+    "🚀 Trajectory Simulator", "⚖️ Optimal Staging Calculator", "🎲 Monte Carlo Dispersion",
+])
 
 # ======================================================================
 # TAB 1: Trajectory simulator (gravity turn ascent + orbital insertion)
@@ -422,3 +425,127 @@ with tab2:
             "- **Step mass**: a stage's total mass (structure + propellant), excluding "
             "everything riding above it."
         )
+
+
+# ======================================================================
+# TAB 3: Monte Carlo dispersion analysis
+# ======================================================================
+with tab3:
+    st.markdown(
+        "Real hardware never performs exactly as specified — manufacturing "
+        "tolerances mean actual Isp, mass, and drag all vary somewhat from "
+        "nominal on any given flight. This runs your vehicle **many times** "
+        "with those parameters randomly perturbed, and shows the resulting "
+        "**spread** of outcomes rather than trusting a single nominal trajectory."
+    )
+
+    mc_col1, mc_col2 = st.columns(2)
+    with mc_col1:
+        mc_payload = st.number_input(
+            "Payload mass (kg)", min_value=1.0, value=500.0, step=50.0, key="mc_payload"
+        )
+        mc_n_samples = st.slider(
+            "Number of Monte Carlo trials", min_value=20, max_value=500, value=150, step=10,
+            help="More trials = smoother statistics, but takes longer to run.",
+        )
+    with mc_col2:
+        mc_isp_sigma = st.slider("Isp uncertainty (1-sigma, %)", 0.0, 10.0, 2.0, 0.5) / 100
+        mc_mass_sigma = st.slider("Mass uncertainty (1-sigma, %)", 0.0, 15.0, 3.0, 0.5) / 100
+        mc_cd_sigma = st.slider("Drag coefficient uncertainty (1-sigma, %)", 0.0, 30.0, 10.0, 1.0) / 100
+
+    mc_n_stages = st.selectbox("Number of stages", options=[1, 2, 3], index=1, key="mc_n_stages")
+    mc_stage_configs = []
+    mc_cols = st.columns(mc_n_stages)
+    for i in range(mc_n_stages):
+        with mc_cols[i]:
+            st.markdown(f"**Stage {i+1} (nominal)**")
+            mc_prop = st.number_input(
+                "Propellant (kg)", min_value=1.0,
+                value=[38000.0, 6000.0, 2000.0][i] if i < 3 else 5000.0,
+                step=500.0, key=f"mc_prop_{i}",
+            )
+            mc_struct = st.number_input(
+                "Structural (kg)", min_value=1.0,
+                value=[4000.0, 800.0, 300.0][i] if i < 3 else 500.0,
+                step=100.0, key=f"mc_struct_{i}",
+            )
+            mc_isp = st.number_input(
+                "Isp (s)", min_value=50.0,
+                value=[280.0, 320.0, 340.0][i] if i < 3 else 300.0,
+                step=10.0, key=f"mc_isp_{i}",
+            )
+            mc_burn = st.number_input(
+                "Burn time (s)", min_value=1.0,
+                value=[120.0, 180.0, 120.0][i] if i < 3 else 100.0,
+                step=10.0, key=f"mc_burn_{i}",
+            )
+            mc_area = st.number_input(
+                "Area (m^2)", min_value=0.0,
+                value=[3.0, 1.2, 0.8][i] if i < 3 else 1.0,
+                step=0.1, key=f"mc_area_{i}",
+            )
+            mc_cd = st.number_input(
+                "CD", min_value=0.0,
+                value=[0.3, 0.25, 0.2][i] if i < 3 else 0.25,
+                step=0.05, key=f"mc_cd_{i}",
+            )
+            mc_stage_configs.append({
+                "prop_mass": mc_prop, "structural_mass": mc_struct,
+                "Isp": mc_isp, "burn_time": mc_burn, "A": mc_area, "CD": mc_cd,
+            })
+
+    run_mc = st.button("🎲 Run Dispersion Analysis", type="primary", use_container_width=True)
+
+    if run_mc:
+        with st.spinner(f"Running {mc_n_samples} Monte Carlo trials..."):
+            mc_result = run_dispersion_analysis(
+                mc_stage_configs, mc_payload, n_samples=mc_n_samples,
+                isp_sigma_pct=mc_isp_sigma, mass_sigma_pct=mc_mass_sigma,
+                cd_sigma_pct=mc_cd_sigma, max_step=1.0,
+            )
+        st.session_state["mc_result"] = mc_result
+
+    if st.session_state.get("mc_result") is not None:
+        mc_result = st.session_state["mc_result"]
+        successful = [s for s in mc_result["samples"] if not s["failed"]]
+        s = mc_result["summary"]
+
+        st.success(f"{s['n_successful']} successful trials ({s['n_failed']} failed)")
+
+        mcol1, mcol2, mcol3 = st.columns(3)
+        if s["final_altitude_km"]:
+            mcol1.metric(
+                "Final altitude (mean ± std)",
+                f"{s['final_altitude_km']['mean']:.0f} km",
+                f"± {s['final_altitude_km']['std']:.0f} km",
+            )
+        if s["final_speed_ms"]:
+            mcol2.metric(
+                "Final speed (mean ± std)",
+                f"{s['final_speed_ms']['mean']:.0f} m/s",
+                f"± {s['final_speed_ms']['std']:.0f} m/s",
+            )
+        mcol3.metric("Valid orbit probability", f"{s['valid_orbit_probability']*100:.1f}%")
+
+        fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
+
+        for sample in successful:
+            axes[0].plot(sample["trajectory"]["t"], sample["trajectory"]["h"],
+                        color="tab:blue", alpha=0.05)
+        axes[0].set_xlabel("Time (s)")
+        axes[0].set_ylabel("Altitude (km)")
+        axes[0].set_title("Altitude Envelope (all trials)")
+        axes[0].grid(alpha=0.3)
+
+        altitudes = [sample["final_altitude_km"] for sample in successful]
+        axes[1].hist(altitudes, bins=25, color="tab:blue", edgecolor="white")
+        axes[1].set_xlabel("Final altitude (km)")
+        axes[1].set_ylabel("Count")
+        axes[1].set_title("Final Altitude Distribution")
+        axes[1].grid(alpha=0.3)
+
+        plt.tight_layout()
+        st.pyplot(fig)
+        plt.close(fig)
+    else:
+        st.info("Configure your vehicle and uncertainty levels above, then click **Run Dispersion Analysis**.")
