@@ -17,9 +17,44 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+from matplotlib.path import Path
+from matplotlib.markers import MarkerStyle
+from matplotlib.transforms import Affine2D
 
 from rocket_sim.vehicle import build_stage_rockets
 from rocket_sim.simulate import run_multistage_ascent
+
+
+def rocket_marker(angle_deg):
+    """
+    Build a small rocket-silhouette marker (nose cone + body + two fins)
+    that points "up" by default and is then rotated to match the
+    vehicle's current flight path angle.
+
+    angle_deg : flight path angle, degrees (90 = straight up, matching
+    the marker's default orientation, so the applied rotation is
+    (angle_deg - 90) degrees).
+    """
+    verts = [
+        (0.00, 1.00),   # nose tip
+        (0.25, 0.35),   # right shoulder
+        (0.22, -0.55),  # right body
+        (0.45, -1.00),  # right fin tip
+        (0.10, -0.65),  # right fin root
+        (0.00, -0.80),  # tail center
+        (-0.10, -0.65), # left fin root
+        (-0.45, -1.00), # left fin tip
+        (-0.22, -0.55), # left body
+        (-0.25, 0.35),  # left shoulder
+        (0.00, 1.00),   # close at nose
+    ]
+    codes = [Path.MOVETO] + [Path.LINETO] * (len(verts) - 2) + [Path.CLOSEPOLY]
+    path = Path(verts, codes)
+
+    # Marker's "up" direction corresponds to a 90 deg flight path angle,
+    # so rotate by (angle_deg - 90) to match the vehicle's actual pitch.
+    transform = Affine2D().rotate_deg(angle_deg - 90)
+    return MarkerStyle(path, transform=transform)
 
 
 def main():
@@ -59,27 +94,34 @@ def main():
     x = result["x"] / 1000.0   # km
     h = result["h"] / 1000.0   # km
     v = result["v"]
+    gamma = result["gamma_deg"]
     sep_times = result["stage_separation_times"]
 
     # Downsample to a manageable number of animation frames (e.g. ~150).
     n_frames = 150
     idx = np.linspace(0, len(t) - 1, n_frames).astype(int)
-    t_f, x_f, h_f, v_f = t[idx], x[idx], h[idx], v[idx]
+    t_f, x_f, h_f, v_f, gamma_f = t[idx], x[idx], h[idx], v[idx], gamma[idx]
 
     fig, ax = plt.subplots(figsize=(9, 6))
-    ax.plot(x, h, color="lightgray", linewidth=1.5, zorder=1, label="Full trajectory")
 
-    # Mark stage separation points on the static trajectory.
-    for st in sep_times:
-        sep_idx = np.searchsorted(t, st)
-        ax.plot(x[sep_idx], h[sep_idx], marker="x", color="black", markersize=8, zorder=2)
+    # Keep only a very faint dotted preview so axis scaling has context,
+    # but don't fully draw the path -- otherwise the red trail (which
+    # traces the same path) is invisible on top of it.
+    ax.plot(x, h, color="lightgray", linewidth=0.8, linestyle=":", zorder=1, alpha=0.5)
 
-    point, = ax.plot([], [], marker="o", color="tab:red", markersize=10, zorder=3, label="Vehicle")
-    trail, = ax.plot([], [], color="tab:red", linewidth=2, zorder=2)
+    # Mark stage separation points (drawn faintly, revealed properly once
+    # the vehicle trail reaches them -- see update()).
+    sep_indices = [np.searchsorted(t, st) for st in sep_times]
+
+    point, = ax.plot([], [], marker=rocket_marker(90), color="tab:red", markersize=22,
+                      zorder=4, label="Vehicle", markeredgecolor="darkred", linestyle="None")
+    trail, = ax.plot([], [], color="tab:red", linewidth=2.5, zorder=3, label="Path flown")
+    sep_markers, = ax.plot([], [], marker="x", color="black", markersize=10,
+                            linestyle="None", zorder=3, label="Stage separation")
 
     time_text = ax.text(0.02, 0.95, "", transform=ax.transAxes, fontsize=11,
                          verticalalignment="top",
-                         bbox=dict(boxstyle="round", facecolor="white", alpha=0.8))
+                         bbox=dict(boxstyle="round", facecolor="white", alpha=0.85))
 
     ax.set_xlabel("Downrange distance (km)")
     ax.set_ylabel("Altitude (km)")
@@ -92,18 +134,29 @@ def main():
     def init():
         point.set_data([], [])
         trail.set_data([], [])
+        sep_markers.set_data([], [])
         time_text.set_text("")
-        return point, trail, time_text
+        return point, trail, sep_markers, time_text
 
     def update(frame):
         point.set_data([x_f[frame]], [h_f[frame]])
+        point.set_marker(rocket_marker(gamma_f[frame]))
         trail.set_data(x_f[:frame + 1], h_f[:frame + 1])
+
+        # Reveal each separation marker once the vehicle has passed it.
+        current_time = t_f[frame]
+        passed = [i for i, st in enumerate(sep_times) if current_time >= st]
+        if passed:
+            sep_x = [x[sep_indices[i]] for i in passed]
+            sep_h = [h[sep_indices[i]] for i in passed]
+            sep_markers.set_data(sep_x, sep_h)
+
         time_text.set_text(
             f"t = {t_f[frame]:5.1f} s\n"
             f"altitude = {h_f[frame]:6.1f} km\n"
             f"speed = {v_f[frame]:6.0f} m/s"
         )
-        return point, trail, time_text
+        return point, trail, sep_markers, time_text
 
     anim = animation.FuncAnimation(
         fig, update, frames=n_frames, init_func=init,
